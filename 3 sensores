@@ -1,0 +1,128 @@
+// 1. MAPEAMENTO DE PINOS
+
+// Sensores: S1 = esquerda, S2 = centro, S3 = direita
+// Pinos de controle da Ponte H (Motores)
+const int IN1 = 26; 
+const int IN2 = 27; 
+const int IN3 = 32;
+const int IN4 = 33; 
+
+// 2. CONFIGURAÇÕES DO PID E MOTORES
+
+float Kp = 100.0; // Resposta imediata ao erro -- valor alto faz o robô tremer
+float Ki = 0.0;   // Erros acumulados (geralmente 0 para seguidores rápidos)
+float Kd = 50.0;  // Freio para evitar oscilações
+
+float P = 0, I = 0, D = 0;
+float erro = 0;
+float erro_anterior = 0;
+float PID_value = 0;
+
+const int velocidade_base = 180; 
+const int velocidade_max = 255;  
+const int velocidade_min = -150; 
+
+// 3. FUNÇÃO SETUP
+
+void setup() {
+  Serial.begin(115200);
+
+  for (int i = 0; i < NUM_SENSORES; i++) {
+    pinMode(pinosSensores[i], INPUT);
+  }
+
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
+
+  acionarMotores(0, 0);
+
+  delay(2000); // Aguarda 2 segundos antes de começar a correr
+}
+
+// 4. LOOP PRINCIPAL
+
+void loop() {
+  erro = calcularErro();
+  calcularPID();
+
+  int velocidade_esq = velocidade_base + PID_value;
+  int velocidade_dir = velocidade_base - PID_value;
+
+  velocidade_esq = constrain(velocidade_esq, velocidade_min, velocidade_max);
+  velocidade_dir = constrain(velocidade_dir, velocidade_min, velocidade_max);
+
+  acionarMotores(velocidade_esq, velocidade_dir);
+
+  // APENAS PARA DEPURAÇÃO (comente quando for correr de verdade)
+  //imprimirSensores();
+}
+
+// 5. FUNÇÕES AUXILIARES
+
+float calcularErro() {
+  int posicao_soma = 0;
+  int sensores_ativos = 0;
+
+  const int pesos[NUM_SENSORES] = {-1, 0, 1};
+
+  for (int i = 0; i < NUM_SENSORES; i++) {
+       bool vendo_linha = (digitalRead(pinosSensores[i]) == HIGH);
+
+    if (vendo_linha) {
+      posicao_soma += pesos[i];
+      sensores_ativos++;
+    }
+  }
+
+  if (sensores_ativos == 0) {
+    return erro_anterior;
+  }
+
+  return (float)posicao_soma / sensores_ativos;
+}
+
+void calcularPID() {
+  P = erro;
+  I = I + erro;
+  D = erro - erro_anterior;
+
+  PID_value = (Kp * P) + (Ki * I) + (Kd * D);
+
+  erro_anterior = erro;
+}
+
+void acionarMotores(int velEsq, int velDir) {
+
+  // ---- Motor Esquerdo ----
+  if (velEsq >= 0) {
+    analogWrite(IN1, velEsq);
+    analogWrite(IN2, 0);
+  } else {
+    analogWrite(IN1, 0);
+    analogWrite(IN2, abs(velEsq));
+  }
+
+  // ---- Motor Direito ----
+  if (velDir >= 0) {
+    analogWrite(IN3, velDir);
+    analogWrite(IN4, 0);
+  } else {
+    analogWrite(IN3, 0);
+    analogWrite(IN4, abs(velDir));
+  }
+}
+
+void imprimirSensores() {
+  Serial.print("Sensores: ");
+  for (int i = 0; i < NUM_SENSORES; i++) {
+    Serial.print(digitalRead(pinosSensores[i]));
+    Serial.print(" ");
+  }
+
+  Serial.print("| Erro: ");
+  Serial.print(erro);
+  Serial.print(" | PID: ");
+  Serial.println(PID_value);
+}
